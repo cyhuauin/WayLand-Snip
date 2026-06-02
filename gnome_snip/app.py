@@ -7,7 +7,7 @@ import signal
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 
 from .portal import ScreenshotPortal, check_portal
 from .pinwin import PinWin
@@ -173,10 +173,28 @@ class App:
             "底部工具栏：\n"
             "  ↔ 移动  ✏ 画笔  □ 矩形\n"
             "  → 箭头  ╱ 直线  T 文字\n"
-            "  ↩ 撤销  ⌫ 清除  复制  ✕ 关闭\n\n"
+            "  ↩ 撤销  ⌫ 清除  复制  ❌ 关闭\n\n"
             "右键托盘图标可访问设置和退出。\n"
             "配置文件：~/.config/gnome-snip/settings.json"
         )
+        dlg.run()
+        dlg.destroy()
+
+    def show_about(self):
+        """显示关于"""
+        dlg = Gtk.AboutDialog()
+        dlg.set_transient_for(self._main_win)
+        dlg.set_program_name("wayland-snip")
+        dlg.set_version("1.0.0")
+        dlg.set_comments("GNOME Wayland 原生截图 + 贴图 + 标注工具")
+        dlg.set_copyright("© 2026")
+        dlg.set_license_type(Gtk.License.MIT_X11)
+        dlg.set_website("https://github.com/cyhuauin/WayLand-Snip")
+        dlg.set_website_label("GitHub 仓库")
+        dlg.set_authors(["Peek"])
+        icon_path = "/usr/local/bin/gnome-snip-icon.png"
+        if os.path.exists(icon_path):
+            dlg.set_logo(GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 64, 64, True))
         dlg.run()
         dlg.destroy()
 

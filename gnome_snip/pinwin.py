@@ -7,6 +7,8 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf
 
+from .icons import load_icon_as_image
+
 COLORS = [
     (1, 0, 0), (0, .8, 0), (0, .4, 1), (1, .6, 0),
     (1, 1, 0), (1, 0, 1), (0, 0, 0), (1, 1, 1),
@@ -110,12 +112,12 @@ class PinWin(Gtk.Window):
         css = Gtk.CssProvider()
         css.load_from_data(b"""
             .snip-bar {
-                background: rgba(30, 30, 40, 0.92);
-                border-top: 1px solid rgba(255,255,255,0.08);
+                background: rgba(250, 250, 250, 0.95);
+                border-top: 1px solid rgba(0,0,0,0.1);
                 padding: 4px 6px;
             }
             .snip-bar button {
-                color: #cdd6f4;
+                color: #333;
                 font-size: 13px;
                 min-width: 26px;
                 min-height: 26px;
@@ -125,16 +127,16 @@ class PinWin(Gtk.Window):
                 background: transparent;
             }
             .snip-bar button:hover {
-                background: rgba(255,255,255,0.1);
-                border-color: rgba(255,255,255,0.12);
+                background: rgba(0,0,0,0.06);
+                border-color: rgba(0,0,0,0.08);
             }
             .snip-bar button:active {
-                background: rgba(255,255,255,0.06);
+                background: rgba(0,0,0,0.1);
             }
             .tool-active {
-                background: rgba(137, 180, 250, 0.25);
-                border-color: rgba(137, 180, 250, 0.5);
-                color: #89b4fa;
+                background: rgba(74, 144, 226, 0.15);
+                border-color: rgba(74, 144, 226, 0.4);
+                color: #4a90e2;
             }
             .color-dot {
                 min-width: 16px;
@@ -156,18 +158,18 @@ class PinWin(Gtk.Window):
                 opacity: 1;
             }
             .snip-zoom {
-                color: #a6adc8;
+                color: #666;
                 font-size: 12px;
                 min-width: 40px;
             }
             .snip-action {
-                color: #a6e3a1;
+                color: #2e7d32;
             }
             .snip-close {
-                color: #f38ba8;
+                color: #c62828;
             }
             .snip-sep {
-                background: rgba(255,255,255,0.1);
+                background: rgba(0,0,0,0.1);
                 min-width: 1px;
                 margin: 4px 3px;
             }
@@ -181,10 +183,16 @@ class PinWin(Gtk.Window):
         )
         bar.get_style_context().add_class("snip-bar")
 
-        def mkbtn(label, tip, cb, css_class=None):
-            b = Gtk.Button(label=label)
+        def mkbtn(icon_name, tip, cb, css_class=None):
+            b = Gtk.Button()
             b.set_tooltip_text(tip)
             b.set_relief(Gtk.ReliefStyle.NONE)
+            img = load_icon_as_image(icon_name, 16)
+            if img:
+                b.set_image(img)
+            else:
+                # 回退到文字
+                b.set_label(icon_name)
             b.connect("clicked", cb)
             if css_class:
                 b.get_style_context().add_class(css_class)
@@ -197,17 +205,17 @@ class PinWin(Gtk.Window):
 
         # ── 工具按钮 ──
         self._tool_btns = {}
-        self._tool_providers = {}  # 存储每个工具按钮的高亮 provider
-        for label, tid, tip in [("↔", "move", "移动"), ("✏", "pen", "画笔"),
-                                 ("□", "rect", "矩形"), ("→", "arrow", "箭头"),
-                                 ("╱", "line", "直线"), ("T", "text", "文字")]:
-            b = mkbtn(label, tip, lambda _, t=tid: self._settool(t))
+        self._tool_providers = {}
+        for icon, tid, tip in [("move", "move", "移动"), ("pen", "pen", "画笔"),
+                                 ("rect", "rect", "矩形"), ("arrow", "arrow", "箭头"),
+                                 ("line", "line", "直线"), ("text", "text", "文字")]:
+            b = mkbtn(icon, tip, lambda _, t=tid: self._settool(t))
             self._tool_btns[tid] = b
             bar.pack_start(b, False, False, 0)
         self._tool_btns[self.tool].get_style_context().add_class("tool-active")
         # 初始高亮
         init_prov = Gtk.CssProvider()
-        init_prov.load_from_data(b"button { background: rgba(137,180,250,0.35); border-color: rgba(137,180,250,0.6); color: #89b4fa; }")
+        init_prov.load_from_data(b"button { background: rgba(74,144,226,0.15); border-color: rgba(74,144,226,0.4); color: #4a90e2; }")
         self._tool_btns[self.tool].get_style_context().add_provider(init_prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
         self._tool_providers[self.tool] = init_prov
         bar.pack_start(sep(), False, False, 0)
@@ -240,17 +248,17 @@ class PinWin(Gtk.Window):
         bar.pack_start(sep(), False, False, 0)
 
         # ── 操作按钮 ──
-        bar.pack_start(mkbtn("↩", "撤销", lambda _: self._undo()), False, False, 0)
-        bar.pack_start(mkbtn("⌫", "清除", lambda _: self._clear_anns()), False, False, 0)
-        bar.pack_start(mkbtn("−", "缩小", lambda _: self._zoom(-1)), False, False, 0)
+        bar.pack_start(mkbtn("undo", "撤销", lambda _: self._undo()), False, False, 0)
+        bar.pack_start(mkbtn("clear", "清除", lambda _: self._clear_anns()), False, False, 0)
+        bar.pack_start(mkbtn("zoom-out", "缩小", lambda _: self._zoom(-1)), False, False, 0)
         self.zlbl = Gtk.Label(label="100%")
         self.zlbl.get_style_context().add_class("snip-zoom")
         bar.pack_start(self.zlbl, False, False, 0)
-        bar.pack_start(mkbtn("+", "放大", lambda _: self._zoom(1)), False, False, 0)
+        bar.pack_start(mkbtn("zoom-in", "放大", lambda _: self._zoom(1)), False, False, 0)
 
         bar.pack_start(sep(), False, False, 0)
-        bar.pack_start(mkbtn("📋", "复制到剪贴板", self._copy, "snip-action"), False, False, 0)
-        bar.pack_end(mkbtn("✕", "关闭", lambda _: self.close(), "snip-close"), False, False, 0)
+        bar.pack_start(mkbtn("copy", "复制到剪贴板", self._copy, "snip-action"), False, False, 0)
+        bar.pack_end(mkbtn("close", "关闭", lambda _: self.close(), "snip-close"), False, False, 0)
 
         return bar
 
@@ -266,7 +274,7 @@ class PinWin(Gtk.Window):
         if t in self._tool_btns:
             btn = self._tool_btns[t]
             prov = Gtk.CssProvider()
-            prov.load_from_data(b"button { background: rgba(137,180,250,0.35); border-color: rgba(137,180,250,0.6); color: #89b4fa; }")
+            prov.load_from_data(b"button { background: rgba(74,144,226,0.15); border-color: rgba(74,144,226,0.4); color: #4a90e2; }")
             btn.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
             self._tool_providers[t] = prov
     def _setcolor(self, c):
@@ -363,7 +371,7 @@ class PinWin(Gtk.Window):
                     prov = Gtk.CssProvider()
                     prov.load_from_data(
                         f"button {{ background: rgb({int(r*255)},{int(g*255)},{int(b*255)}); "
-                        f"border-radius: 6px; padding: 0; border: 2px solid #89b4fa; }}".encode()
+                        f"border-radius: 6px; padding: 0; border: 2px solid #4a90e2; }}".encode()
                     )
                     child.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
                 break
@@ -385,7 +393,7 @@ class PinWin(Gtk.Window):
         if lw in self._lw_btns:
             btn = self._lw_btns[lw]
             prov = Gtk.CssProvider()
-            prov.load_from_data(b"button { background: rgba(137,180,250,0.35); border-color: rgba(137,180,250,0.6); color: #89b4fa; }")
+            prov.load_from_data(b"button { background: rgba(74,144,226,0.15); border-color: rgba(74,144,226,0.4); color: #4a90e2; }")
             btn.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
             self._lw_providers[lw] = prov
         self._lw_active = lw

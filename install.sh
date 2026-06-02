@@ -36,6 +36,9 @@ python3 -c "import gi; gi.require_version('AppIndicator3','0.1')" 2>/dev/null ||
 echo "安装 gnome-snip..."
 sudo mkdir -p "$PKG_DIR"
 sudo cp "$SCRIPT_DIR/gnome_snip/"*.py "$PKG_DIR/"
+sudo cp -r "$SCRIPT_DIR/icons" "$PKG_DIR/../gnome_snip_icons" 2>/dev/null || true
+sudo mkdir -p /usr/local/lib/python3.13/dist-packages/gnome_snip_icons
+sudo cp "$SCRIPT_DIR/icons/"*.svg /usr/local/lib/python3.13/dist-packages/gnome_snip_icons/
 sudo cp "$SCRIPT_DIR/gnome-snip" "$INSTALL_DIR/gnome-snip"
 sudo cp "$SCRIPT_DIR/icon.png" "$INSTALL_DIR/gnome-snip-icon.png" 2>/dev/null || true
 sudo chmod +x "$INSTALL_DIR/gnome-snip"

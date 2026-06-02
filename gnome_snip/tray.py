@@ -40,6 +40,11 @@ class TrayIcon:
         item_help.connect("activate", lambda _: app.show_help())
         menu.append(item_help)
 
+        # 关于
+        item_about = Gtk.MenuItem(label="    ℹ️  关于")
+        item_about.connect("activate", lambda _: app.show_about())
+        menu.append(item_about)
+
         menu.append(Gtk.SeparatorMenuItem())
 
         # 重新启动
@@ -50,7 +55,7 @@ class TrayIcon:
         menu.append(Gtk.SeparatorMenuItem())
 
         # 退出
-        item_quit = Gtk.MenuItem(label="    🚪  退出")
+        item_quit = Gtk.MenuItem(label="    ⏏️  退出")
         item_quit.connect("activate", lambda _: app.quit())
         menu.append(item_quit)
 
