@@ -34,6 +34,7 @@ class PinWin(Gtk.Window):
 
         iw, ih = self.orig.get_width(), self.orig.get_height()
         self._ann_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, iw, ih)
+        self._temp_surface = None  # 临时预览 surface
 
         self.set_decorated(False)
         self.set_keep_above(True)
@@ -59,39 +60,23 @@ class PinWin(Gtk.Window):
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(vbox)
 
-        self.img = Gtk.Image()
-        pb = self.orig.scale_simple(self._disp_w, self._disp_h,
-                                    GdkPixbuf.InterpType.BILINEAR)
-        self.img.set_from_pixbuf(pb)
-
-        # 用 EventBox 包裹图片，确保滚轮事件被捕获
-        self.img_evb = Gtk.EventBox()
-        self.img_evb.add(self.img)
-        self.img_evb.set_events(
-            Gdk.EventMask.SCROLL_MASK
-            | Gdk.EventMask.BUTTON_PRESS_MASK
-            | Gdk.EventMask.BUTTON_RELEASE_MASK
-            | Gdk.EventMask.POINTER_MOTION_MASK
-        )
-        self.img_evb.connect("scroll-event", self._on_scroll)
-        self.img_evb.connect("button-press-event", self._on_press)
-        self.img_evb.connect("button-release-event", self._on_release)
-        self.img_evb.connect("motion-notify-event", self._on_motion)
-        vbox.pack_start(self.img_evb, True, True, 0)
-
-        # 窗口级别也接收事件（处理拖拽等）
-        self.connect("scroll-event", self._on_scroll)
-        self.connect("button-press-event", self._on_press)
-        self.connect("button-release-event", self._on_release)
-        self.connect("motion-notify-event", self._on_motion)
-        self.connect("draw", self._on_draw)
-        self.connect("destroy", lambda _: on_close(self) if on_close else None)
-        self.set_events(
+        # ── DrawingArea：直接渲染图片+标注 ──
+        self.darea = Gtk.DrawingArea()
+        self.darea.set_size_request(self._disp_w, self._disp_h)
+        self.darea.connect("draw", self._on_draw)
+        self.darea.connect("button-press-event", self._on_press)
+        self.darea.connect("button-release-event", self._on_release)
+        self.darea.connect("motion-notify-event", self._on_motion)
+        self.darea.connect("scroll-event", self._on_scroll)
+        self.darea.set_events(
             Gdk.EventMask.BUTTON_PRESS_MASK
             | Gdk.EventMask.BUTTON_RELEASE_MASK
             | Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.SCROLL_MASK
         )
+        vbox.pack_start(self.darea, True, True, 0)
+
+        self.connect("destroy", lambda _: on_close(self) if on_close else None)
         vbox.pack_end(bar, False, False, 0)
 
         # 居中
@@ -406,20 +391,8 @@ class PinWin(Gtk.Window):
         self._refresh_img()
 
     def _refresh_img(self):
-        pb = self.orig.scale_simple(self._disp_w, self._disp_h,
-                                    GdkPixbuf.InterpType.BILINEAR)
-        if self.anns:
-            s = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._disp_w, self._disp_h)
-            ctx = cairo.Context(s)
-            Gdk.cairo_set_source_pixbuf(ctx, pb, 0, 0)
-            ctx.paint()
-            ctx.save()
-            ctx.scale(self.scale, self.scale)
-            ctx.set_source_surface(self._ann_surface, 0, 0)
-            ctx.paint()
-            ctx.restore()
-            pb = Gdk.pixbuf_get_from_surface(s, 0, 0, self._disp_w, self._disp_h)
-        self.img.set_from_pixbuf(pb)
+        """刷新显示"""
+        self.darea.queue_draw()
         self.zlbl.set_label(f"{int(self.scale * 100)}%")
         self.resize(self._disp_w, self._disp_h + 36)
 
@@ -437,11 +410,15 @@ class PinWin(Gtk.Window):
         self._zoom(d)
         return True
 
-    # ── 鼠标事件 ──
     def _w2i(self, wx, wy):
+        """控件坐标 → 原图坐标"""
+        alloc = self.darea.get_allocation()
+        aw, ah = alloc.width, alloc.height
+        if aw <= 0 or ah <= 0:
+            aw, ah = self._disp_w, self._disp_h
         return (
-            wx * self.orig.get_width() / max(1, self._disp_w),
-            wy * self.orig.get_height() / max(1, self._disp_h),
+            wx * self.orig.get_width() / max(1, aw),
+            wy * self.orig.get_height() / max(1, ah),
         )
 
     def _on_press(self, w, e):
@@ -473,6 +450,7 @@ class PinWin(Gtk.Window):
             self._draw_pen(ctx, self._pen_pts)
             self.anns.append(("pen", list(self._pen_pts), self.color, self.lw))
         self._drawing = False
+        self._temp_surface = None  # 清空临时预览
         self._refresh_img()
         return True
 
@@ -480,18 +458,55 @@ class PinWin(Gtk.Window):
         if not self._drawing:
             return False
         p = self._w2i(e.x, e.y)
-        self._redraw_anns()
-        ctx = cairo.Context(self._ann_surface)
+        # 创建临时预览 surface（基于已有标注）
+        w_orig, h_orig = self.orig.get_width(), self.orig.get_height()
+        self._temp_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w_orig, h_orig)
+        ctx = cairo.Context(self._temp_surface)
+        # 先画已有标注
+        for a in self.anns:
+            if a[0] == "pen":
+                self._draw_pen(ctx, a[1], color=a[2], lw=a[3])
+            elif a[0] == "text":
+                _, text, pos, color, fsize = a
+                ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+                ctx.set_font_size(fsize)
+                ctx.set_source_rgba(*color, 0.95)
+                ctx.move_to(pos[0], pos[1] + fsize)
+                ctx.show_text(text)
+            else:
+                self._draw_shape(ctx, a[0], a[1], a[2], color=a[3], lw=a[4])
+        # 再画当前拖拽的形状
         if self.tool == "pen":
             self._pen_pts.append(p)
             self._draw_pen(ctx, self._pen_pts)
         elif self.tool in ("rect", "arrow", "line"):
             self._draw_shape(ctx, self.tool, self._start, p)
-        self._refresh_img()
+        self.darea.queue_draw()
         return True
 
     def _on_draw(self, w, cr):
-        return False
+        """DrawingArea 绘制：原图 + 标注"""
+        # 绘制原图
+        pb = self.orig.scale_simple(self._disp_w, self._disp_h,
+                                    GdkPixbuf.InterpType.BILINEAR)
+        Gdk.cairo_set_source_pixbuf(cr, pb, 0, 0)
+        cr.paint()
+        # 绘制标注 surface（已有标注 + 当前绘制）
+        if self._temp_surface:
+            # 有临时预览（正在绘制中）
+            cr.save()
+            cr.scale(self.scale, self.scale)
+            cr.set_source_surface(self._temp_surface, 0, 0)
+            cr.paint()
+            cr.restore()
+        elif self.anns:
+            # 有已完成的标注
+            cr.save()
+            cr.scale(self.scale, self.scale)
+            cr.set_source_surface(self._ann_surface, 0, 0)
+            cr.paint()
+            cr.restore()
+        return True
 
     # ── 标注绘制 ──
     def _draw_pen(self, ctx, pts, color=None, lw=None):
