@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=gnome-snip
+GenericName=Screenshot Tool
+Comment=GNOME Wayland 截图 + 贴图 + 标注工具
+Exec=/usr/local/bin/gnome-snip
+Icon=/usr/local/bin/gnome-snip-icon.png
+Terminal=false
+Categories=Utility;Graphics;
+Keywords=screenshot;snip;capture;
+StartupNotify=false
