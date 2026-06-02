@@ -81,6 +81,17 @@ class PrefsDialog(Gtk.Dialog):
         self.max_pins.set_value(settings.get("max_pins", 20))
         grid1.attach(self.max_pins, 1, 3, 1, 1)
 
+        lbl4 = Gtk.Label(label="最大保存截图数：")
+        lbl4.set_halign(Gtk.Align.START)
+        grid1.attach(lbl4, 0, 4, 1, 1)
+        self.max_saved = Gtk.SpinButton.new_with_range(5, 500, 5)
+        self.max_saved.set_value(settings.get("max_saved_files", 20))
+        grid1.attach(self.max_saved, 1, 4, 1, 1)
+        lbl4_note = Gtk.Label(label="(超过自动覆盖最早的)")
+        lbl4_note.set_opacity(0.5)
+        lbl4_note.set_halign(Gtk.Align.START)
+        grid1.attach(lbl4_note, 1, 5, 1, 1)
+
         frame1.add(grid1)
         box.pack_start(frame1, False, False, 0)
 
@@ -141,6 +152,7 @@ class PrefsDialog(Gtk.Dialog):
         self.settings.set("auto_pin", self.auto_pin.get_active())
         self.settings.set("save_dir", self.save_dir.get_text())
         self.settings.set("max_pins", int(self.max_pins.get_value()))
+        self.settings.set("max_saved_files", int(self.max_saved.get_value()))
         self.settings.set("initial_scale", self.init_scale.get_value())
         self.settings.set("default_line_width", int(self.line_width.get_value()))
         self.settings.set("default_tool", self.default_tool.get_active_id())

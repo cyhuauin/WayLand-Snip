@@ -12,12 +12,13 @@ DEFAULTS = {
     "auto_pin": True,
     "save_dir": "/tmp/gnome-snip",
     "max_pins": 20,
+    "max_saved_files": 20,       # 最大保存截图数
     "initial_scale": 0.6,
     "default_tool": "move",
     "default_color": [1, 0, 0],
     "default_line_width": 3,
-    "hotkey": "F1",             # 截图快捷键
-    "autostart": False,         # 开机启动
+    "hotkey": "F1",
+    "autostart": False,
 }
 
 

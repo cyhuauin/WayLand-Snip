@@ -96,6 +96,9 @@ class App:
         d = os.path.join(save_dir, f"snip_{os.getpid()}_{GLib.get_monotonic_time()}.png")
         shutil.copy2(path, d)
 
+        # 清理超出数量的旧截图
+        self._cleanup_old_files(save_dir)
+
         # 自动复制到剪贴板
         if self.settings.get("auto_copy", True):
             try:
@@ -138,6 +141,23 @@ class App:
         for w in list(self.pins):
             w.close()
         self.pins.clear()
+
+    def _cleanup_old_files(self, save_dir):
+        """清理超出数量的旧截图"""
+        try:
+            max_files = self.settings.get("max_saved_files", 20)
+            files = sorted(
+                [os.path.join(save_dir, f) for f in os.listdir(save_dir)
+                 if f.endswith(".png")],
+                key=os.path.getmtime, reverse=True
+            )
+            for f in files[max_files:]:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+        except Exception:
+            pass
 
     def quit(self):
         """退出应用"""
