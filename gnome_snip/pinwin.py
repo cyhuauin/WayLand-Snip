@@ -63,6 +63,8 @@ class PinWin(Gtk.Window):
         # ── DrawingArea：直接渲染图片+标注 ──
         self.darea = Gtk.DrawingArea()
         self.darea.set_size_request(self._disp_w, self._disp_h)
+        self.darea.set_hexpand(False)
+        self.darea.set_vexpand(False)
         self.darea.connect("draw", self._on_draw)
         self.darea.connect("button-press-event", self._on_press)
         self.darea.connect("button-release-event", self._on_release)
@@ -74,7 +76,7 @@ class PinWin(Gtk.Window):
             | Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.SCROLL_MASK
         )
-        vbox.pack_start(self.darea, True, True, 0)
+        vbox.pack_start(self.darea, False, False, 0)
 
         self.connect("destroy", lambda _: on_close(self) if on_close else None)
         vbox.pack_end(bar, False, False, 0)
@@ -87,15 +89,16 @@ class PinWin(Gtk.Window):
         self.show_all()
 
     def _build_toolbar(self):
-        bar = Gtk.Box(spacing=3)
-        bar.set_margin_start(8)
-        bar.set_margin_end(8)
-        bar.set_margin_top(4)
-        bar.set_margin_bottom(4)
+        self._bar = Gtk.Box(spacing=3)
+        self._bar.set_margin_start(8)
+        self._bar.set_margin_end(8)
+        self._bar.set_margin_top(4)
+        self._bar.set_margin_bottom(4)
+        bar = self._bar
 
         # ── 现代化 CSS ──
-        css = Gtk.CssProvider()
-        css.load_from_data(b"""
+        self._bar_css = Gtk.CssProvider()
+        self._bar_css.load_from_data(b"""
             .snip-bar {
                 background: rgba(250, 250, 250, 0.95);
                 border-top: 1px solid rgba(0,0,0,0.1);
@@ -160,11 +163,11 @@ class PinWin(Gtk.Window):
             }
         """)
         Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(), css,
+            Gdk.Screen.get_default(), self._bar_css,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
         )
         bar.get_style_context().add_provider(
-            css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+            self._bar_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
         )
         bar.get_style_context().add_class("snip-bar")
 
@@ -191,11 +194,16 @@ class PinWin(Gtk.Window):
         # ── 工具按钮 ──
         self._tool_btns = {}
         self._tool_providers = {}
+        self._tool_orig_pixbufs = {}  # 存储原始图标 pixbuf
         for icon, tid, tip in [("move", "move", "移动"), ("pen", "pen", "画笔"),
                                  ("rect", "rect", "矩形"), ("arrow", "arrow", "箭头"),
                                  ("line", "line", "直线"), ("text", "text", "文字")]:
             b = mkbtn(icon, tip, lambda _, t=tid: self._settool(t))
             self._tool_btns[tid] = b
+            # 存储原始图标
+            img = b.get_image()
+            if img and img.get_pixbuf():
+                self._tool_orig_pixbufs[tid] = img.get_pixbuf().copy()
             bar.pack_start(b, False, False, 0)
         self._tool_btns[self.tool].get_style_context().add_class("tool-active")
         # 初始高亮
@@ -223,6 +231,7 @@ class PinWin(Gtk.Window):
         # ── 线粗 ──
         self._lw_btns = {}
         self._lw_providers = {}
+        self._lw_orig_pixbufs = {}
         for lw_val, lw_label in [(1, "·"), (2, "─"), (3, "━"), (5, "▬"), (8, "■")]:
             b = mkbtn(lw_label, f"线宽 {lw_val}", lambda _, v=lw_val: self._setlw(v), "lw-btn")
             self._lw_btns[lw_val] = b
@@ -385,13 +394,55 @@ class PinWin(Gtk.Window):
 
     # ── 缩放 ──
     def _zoom(self, d):
-        self.scale = max(0.1, min(5.0, self.scale + 0.1 * d))
+        self.scale = max(0.3, min(5.0, self.scale + 0.1 * d))
         self._disp_w = max(1, int(self.orig.get_width() * self.scale))
         self._disp_h = max(1, int(self.orig.get_height() * self.scale))
+        self._update_toolbar_scale()
         self._refresh_img()
+
+    def _update_toolbar_scale(self):
+        """更新工具栏缩放"""
+        s = max(0.3, min(1.0, self.scale))
+        font_size = int(13 * s)
+        btn_size = int(26 * s)
+        icon_size = int(16 * s)
+
+        if hasattr(self, '_bar_css'):
+            try:
+                self._bar_css.load_from_data(
+                    f".snip-bar button {{ min-width: {btn_size}px; min-height: {btn_size}px; "
+                    f"font-size: {font_size}px; padding: {int(3*s)}px {int(6*s)}px; }}".encode()
+                )
+            except Exception:
+                pass
+
+        if hasattr(self, '_bar'):
+            self._bar.set_margin_start(int(8 * s))
+            self._bar.set_margin_end(int(8 * s))
+            self._bar.set_margin_top(int(4 * s))
+            self._bar.set_margin_bottom(int(4 * s))
+
+        # 更新工具按钮图标（从原始 pixbuf 缩放）
+        for tid, btn in self._tool_btns.items():
+            if tid in self._tool_orig_pixbufs:
+                img = btn.get_image()
+                if img:
+                    orig = self._tool_orig_pixbufs[tid]
+                    new_pb = orig.scale_simple(icon_size, icon_size, GdkPixbuf.InterpType.HYPER)
+                    img.set_from_pixbuf(new_pb)
+
+        # 更新线粗按钮图标（从原始缩放）
+        for lw_val, btn in self._lw_btns.items():
+            if lw_val in self._lw_orig_pixbufs:
+                img = btn.get_image()
+                if img:
+                    orig = self._lw_orig_pixbufs[lw_val]
+                    new_pb = orig.scale_simple(icon_size, icon_size, GdkPixbuf.InterpType.HYPER)
+                    img.set_from_pixbuf(new_pb)
 
     def _refresh_img(self):
         """刷新显示"""
+        self.darea.set_size_request(self._disp_w, self._disp_h)
         self.darea.queue_draw()
         self.zlbl.set_label(f"{int(self.scale * 100)}%")
         self.resize(self._disp_w, self._disp_h + 36)

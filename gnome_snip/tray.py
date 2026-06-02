@@ -31,7 +31,7 @@ class TrayIcon:
         menu.append(Gtk.SeparatorMenuItem())
 
         # 设置
-        item_prefs = Gtk.MenuItem(label="    ⚙  设置")
+        item_prefs = Gtk.MenuItem(label="    ⚙️  设置")
         item_prefs.connect("activate", lambda _: app.show_prefs())
         menu.append(item_prefs)
 
